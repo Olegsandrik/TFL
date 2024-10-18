@@ -10,7 +10,7 @@ class Table:
         self.rows = []
         self.columns = []
         self.content = []
-        self.alfabet = {"a", "b"}
+        self.alfabet = {"a", "b", "c", 0, 1, 2}
 
     def add_to_main_part_index(self, index: int):
         self.main_part_indexes.add(index)
