@@ -12,7 +12,7 @@ class Table:
         self.rows = []
         self.columns = []
         self.content = []
-        self.alfabet = {"L", "R"}
+        self.alfabet = {'a', 'b', 'c', '0', '1', '2'}  # {"L", "R"}
 
     def add_to_main_part_index(self, index: int):
         self.main_part_indexes.append(index)
@@ -119,6 +119,9 @@ def fill_table_from_MAT(table: Table):
                 if word[0] == 'ε':
                     word = word[1:]
 
+                if word[len(word)-1] == 'ε' and word != 'ε':
+                    word = word[:len(word)-1]
+
                 data = {
                     'word': word
                 }
@@ -126,7 +129,6 @@ def fill_table_from_MAT(table: Table):
                 response = requests.post(url, json=data)
                 json_response = response.json()
                 ans = int(json_response.get('response'))
-                print("Добавили значение:", word, ans)
                 table.content[i][j] = ans
 
 
@@ -154,10 +156,6 @@ def send_table_to_MAT(table: Table) -> str:
     non_main_prefixes = []
     table_main = []
     table_non_main = []
-    print("-------------------")
-    table.print()
-
-    print("len rows: ", len(table.rows))
     for index_row in range(len(table.rows)):
         if index_row in table.main_part_indexes:
             main_prefixes.append(table.rows[index_row])
@@ -177,16 +175,13 @@ def send_table_to_MAT(table: Table) -> str:
         "main_prefixes": main_prefixes_res,
         "non_main_prefixes": non_main_prefixes_res,
         "suffixes": suffixes,
-        "table": table_main_res +' '+ table_non_main_res,
+        "table": table_main_res + ' ' + table_non_main_res,
     }
 
     response = requests.post(url, json=data)
     json_response = response.json()
-    ans = bool(json_response.get('type'))
+    ans = json_response.get('type')
     counterexample = str(json_response.get('response'))
-    print("data:", data)
-    print("ans:", json_response)
-    print("-------------------")
     if ans is True or ans is False:
         return counterexample
 
@@ -211,12 +206,11 @@ if __name__ == "__main__":
                 ok_or_counterexample = send_table_to_MAT(new_table)
                 if ok_or_counterexample == "ok":
                     new_table.print()
+                    print("Победили")
                     break
                 else:
                     add_counterexample(new_table, ok_or_counterexample)
             else:
-                new_table.print()
                 continue
         else:
-            new_table.print()
             continue
