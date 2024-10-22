@@ -2,18 +2,20 @@
 # Алфавит: {a,b,c,0,1,2}
 # При алфавите {a,b} и языком с консультации по лабораторной пройдено верно!
 import itertools
+import requests
+import json
 
 
 class Table:
     def __init__(self):
-        self.main_part_indexes = {0}
+        self.main_part_indexes = [0]
         self.rows = []
         self.columns = []
         self.content = []
-        self.alfabet = {"a", "b", "c", 0, 1, 2}
+        self.alfabet = {"L", "R"}
 
     def add_to_main_part_index(self, index: int):
-        self.main_part_indexes.add(index)
+        self.main_part_indexes.append(index)
 
     def add_column(self, column: str):
         self.columns.append(column)
@@ -31,7 +33,7 @@ class Table:
         self.content[row_index][column_index] = content
 
     def print(self):
-        print("Главная часть содержит следующие строки: ", self. main_part_indexes)
+        print("Главная часть содержит следующие строки: ", self.main_part_indexes)
         print("Столбцы", self.columns)
         print("Строки", self.rows)
         print("Содержимое", self.content)
@@ -40,16 +42,19 @@ class Table:
 def make_full_table(table: Table) -> bool:
     is_full = True
     for i in range(len(table.rows)):
-        must_be_in_main_part = True
-        for main_len_index in table.main_part_indexes:
-            if table.content[i] == table.content[main_len_index]:
-                must_be_in_main_part = False
-                continue
-            else:
-                continue
-        if must_be_in_main_part:
+        if i in table.main_part_indexes:
+            continue
+
+        in_main_part = False
+        for index in table.main_part_indexes:
+            if table.content[i] == table.content[index]:
+                in_main_part = True
+                break
+
+        if not in_main_part:
             is_full = False
             table.add_to_main_part_index(i)
+
     return is_full
 
 
@@ -80,12 +85,11 @@ def make_contradiction_table(table: Table) -> bool:
         for pair_strings in eq_pairs:
             # распаковываем кортеж
             main_first_string_pref, main_second_string_pref = pair_strings
-            # двойным циклом пройдем все значения в пуле строк из добавленной части
-            for first_string_and_pref in strings_and_prefix_pool:
-                for second_string_and_pref in strings_and_prefix_pool:
-                    # распаковываем кортежи
-                    first_string, first_pref = first_string_and_pref
-                    second_string, second_pref = second_string_and_pref
+
+            for i in range(len(strings_and_prefix_pool)):
+                for j in range(i + 1, len(strings_and_prefix_pool)):
+                    first_string, first_pref = strings_and_prefix_pool[i][0], strings_and_prefix_pool[i][1]
+                    second_string, second_pref = strings_and_prefix_pool[j][0], strings_and_prefix_pool[j][1]
                     # Во избежании совпадения во время прохода двойным циклом
                     if first_pref != second_pref:
                         # условие на вхождение суффикса главной части в суффикс добавленной части (подстрока в начале)
@@ -99,7 +103,7 @@ def make_contradiction_table(table: Table) -> bool:
                                 # найдем v^k
                                 for i in range(len(first_string)):
                                     if first_string[i] != second_string[i]:
-                                        table.add_column(remainder1+table.columns[i])
+                                        table.add_column(remainder1 + table.columns[i])
     return is_contradiction
 
 
@@ -110,15 +114,27 @@ def fill_table_from_MAT(table: Table):
                 prefix = table.rows[i]
                 suffix = table.columns[j]
                 word = prefix + suffix
-                print("Введите значение для слова", word)
-                ans = input()
+                url = 'http://0.0.0.0:8095/checkWord'
+
+                if word[0] == 'ε':
+                    word = word[1:]
+
+                data = {
+                    'word': word
+                }
+
+                response = requests.post(url, json=data)
+                json_response = response.json()
+                ans = int(json_response.get('response'))
+                print("Добавили значение:", word, ans)
                 table.content[i][j] = ans
-                # Идем в мат за значением word и меняем table.content[i][j] на результат от МАТа
 
 
 def add_counterexample(table: Table, counterexample: str):
+    counterexample = counterexample[::-1]
     for i in range(1, len(counterexample) + 1):
-        table.add_column(counterexample[:i])
+        add = counterexample[:i]
+        table.add_column(add[::-1])
     fill_table_from_MAT(table)
 
 
@@ -126,22 +142,63 @@ def add_counterexample(table: Table, counterexample: str):
 def add_new_strings(table: Table):
     for mainIndex in table.main_part_indexes:
         for letter in table.alfabet:
-            if not (table.rows[mainIndex]+letter in table.rows):
-                table.add_row(table.rows[mainIndex]+letter)
+            if not (table.rows[mainIndex] + letter in table.rows):
+                table.add_row(table.rows[mainIndex] + letter)
 
 
 def send_table_to_MAT(table: Table) -> str:
+    url = 'http://0.0.0.0:8095/checkTable'
+
+    suffixes = ' '.join(table.columns)
+    main_prefixes = []
+    non_main_prefixes = []
+    table_main = []
+    table_non_main = []
+    print("-------------------")
     table.print()
-    print("Уважаемый МАТ внесите вердикт")
-    string = str(input())
-    return string
+
+    print("len rows: ", len(table.rows))
+    for index_row in range(len(table.rows)):
+        if index_row in table.main_part_indexes:
+            main_prefixes.append(table.rows[index_row])
+            table_main.append(table.content[index_row])
+        else:
+            non_main_prefixes.append(table.rows[index_row])
+            table_non_main.append(table.content[index_row])
+
+    # table_data ' '.join(map(str, itertools.chain.from_iterable(table_main)))
+    main_prefixes_res = ' '.join(main_prefixes)
+    non_main_prefixes_res = ' '.join(non_main_prefixes)
+
+    table_main_res = ' '.join(map(str, itertools.chain.from_iterable(table_main)))
+    table_non_main_res = ' '.join(map(str, itertools.chain.from_iterable(table_non_main)))
+
+    data = {
+        "main_prefixes": main_prefixes_res,
+        "non_main_prefixes": non_main_prefixes_res,
+        "suffixes": suffixes,
+        "table": table_main_res +' '+ table_non_main_res,
+    }
+
+    response = requests.post(url, json=data)
+    json_response = response.json()
+    ans = bool(json_response.get('type'))
+    counterexample = str(json_response.get('response'))
+    print("data:", data)
+    print("ans:", json_response)
+    print("-------------------")
+    if ans is True or ans is False:
+        return counterexample
+
+    if ans is None:
+        return "ok"
 
 
 if __name__ == "__main__":
     new_table = Table()
 
-    new_table.add_column('e')
-    new_table.add_row('e')
+    new_table.add_column('ε')
+    new_table.add_row('ε')
 
     fill_table_from_MAT(new_table)
 
@@ -149,14 +206,17 @@ if __name__ == "__main__":
         add_new_strings(new_table)
         fill_table_from_MAT(new_table)
 
-        if (make_full_table(new_table) and make_contradiction_table(new_table)):
-            ok_or_counterexample = send_table_to_MAT(new_table)
-            if ok_or_counterexample == "ok":
-                new_table.print()
-                break
+        if make_full_table(new_table):
+            if make_contradiction_table(new_table):
+                ok_or_counterexample = send_table_to_MAT(new_table)
+                if ok_or_counterexample == "ok":
+                    new_table.print()
+                    break
+                else:
+                    add_counterexample(new_table, ok_or_counterexample)
             else:
-                add_counterexample(new_table, ok_or_counterexample)
+                new_table.print()
+                continue
         else:
+            new_table.print()
             continue
-
-
